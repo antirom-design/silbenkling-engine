@@ -1,65 +1,87 @@
-import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
+import initSqlJs, { Database } from 'sql.js'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import type { Entry, Event } from '@/types'
 
 const DB_PATH = process.env.DB_PATH || './data/silbenkling.db'
 
 class SilbenklingDB {
-  private db: Database.Database
+  private db: Database | null = null
+  private SQL: any = null
 
-  constructor(dbPath: string = DB_PATH) {
-    this.db = new Database(dbPath)
-    this.init()
-  }
+  async init() {
+    if (this.db) return
 
-  private init() {
+    this.SQL = await initSqlJs()
+
+    if (existsSync(DB_PATH)) {
+      const buffer = readFileSync(DB_PATH)
+      this.db = new this.SQL.Database(buffer)
+    } else {
+      this.db = new this.SQL.Database()
+    }
+
     const schema = readFileSync(join(process.cwd(), 'src/db/schema.sql'), 'utf-8')
     this.db.exec(schema)
+    this.persist()
+  }
+
+  private persist() {
+    if (!this.db) return
+    const data = this.db.export()
+    writeFileSync(DB_PATH, Buffer.from(data))
   }
 
   insertEntry(entry: Entry): void {
-    const stmt = this.db.prepare(`
-      INSERT INTO entries (
+    if (!this.db) throw new Error('Database not initialized')
+
+    this.db.run(
+      `INSERT INTO entries (
         id, topic, type, content, tags, context,
         created_at, created_by, read_permissions, write_permissions, version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-
-    stmt.run(
-      entry.id,
-      entry.topic,
-      entry.type,
-      entry.content,
-      JSON.stringify(entry.metadata.tags),
-      entry.metadata.context ? JSON.stringify(entry.metadata.context) : null,
-      entry.metadata.created_at,
-      entry.metadata.created_by,
-      JSON.stringify(entry.permissions.read),
-      JSON.stringify(entry.permissions.write),
-      entry.version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entry.id,
+        entry.topic,
+        entry.type,
+        entry.content,
+        JSON.stringify(entry.metadata.tags),
+        entry.metadata.context ? JSON.stringify(entry.metadata.context) : null,
+        entry.metadata.created_at,
+        entry.metadata.created_by,
+        JSON.stringify(entry.permissions.read),
+        JSON.stringify(entry.permissions.write),
+        entry.version
+      ]
     )
+    this.persist()
   }
 
   insertEvent(event: Event): void {
-    const stmt = this.db.prepare(`
-      INSERT INTO events (id, type, timestamp, actor, topic, entry_id, payload)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `)
+    if (!this.db) throw new Error('Database not initialized')
 
-    stmt.run(
-      event.id,
-      event.type,
-      event.timestamp,
-      event.actor,
-      event.topic,
-      event.entry_id || null,
-      event.payload ? JSON.stringify(event.payload) : null
+    this.db.run(
+      `INSERT INTO events (id, type, timestamp, actor, topic, entry_id, payload)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        event.id,
+        event.type,
+        event.timestamp,
+        event.actor,
+        event.topic,
+        event.entry_id || null,
+        event.payload ? JSON.stringify(event.payload) : null
+      ]
     )
+    this.persist()
   }
 
   searchEntries(topic: string, query: string, actor: string): Entry[] {
+    if (!this.db) throw new Error('Database not initialized')
+
     const topicPattern = topic.endsWith('%') ? topic : `${topic}%`
+    const searchPattern = `%${query}%`
+    const actorPattern = `%"${actor}"%`
 
     const stmt = this.db.prepare(`
       SELECT * FROM entries
@@ -73,16 +95,22 @@ class SilbenklingDB {
       LIMIT 10
     `)
 
-    const searchPattern = `%${query}%`
-    const actorPattern = `%"${actor}"%`
+    stmt.bind([topicPattern, searchPattern, searchPattern, actorPattern])
 
-    const rows = stmt.all(topicPattern, searchPattern, searchPattern, actorPattern) as any[]
+    const rows: any[] = []
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject())
+    }
+    stmt.free()
 
     return rows.map(row => this.rowToEntry(row))
   }
 
   getEntriesByTopic(topic: string, actor: string): Entry[] {
+    if (!this.db) throw new Error('Database not initialized')
+
     const topicPattern = topic.endsWith('%') ? topic : `${topic}%`
+    const actorPattern = `%"${actor}"%`
 
     const stmt = this.db.prepare(`
       SELECT * FROM entries
@@ -94,8 +122,13 @@ class SilbenklingDB {
       ORDER BY created_at DESC
     `)
 
-    const actorPattern = `%"${actor}"%`
-    const rows = stmt.all(topicPattern, actorPattern) as any[]
+    stmt.bind([topicPattern, actorPattern])
+
+    const rows: any[] = []
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject())
+    }
+    stmt.free()
 
     return rows.map(row => this.rowToEntry(row))
   }
@@ -107,6 +140,8 @@ class SilbenklingDB {
     to?: string
     actor?: string
   }): Event[] {
+    if (!this.db) throw new Error('Database not initialized')
+
     let query = 'SELECT * FROM events WHERE 1=1'
     const params: any[] = []
 
@@ -138,7 +173,13 @@ class SilbenklingDB {
     query += ' ORDER BY timestamp DESC LIMIT 100'
 
     const stmt = this.db.prepare(query)
-    const rows = stmt.all(...params) as any[]
+    stmt.bind(params)
+
+    const rows: any[] = []
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject())
+    }
+    stmt.free()
 
     return rows.map(row => this.rowToEvent(row))
   }
@@ -176,15 +217,19 @@ class SilbenklingDB {
   }
 
   close() {
-    this.db.close()
+    if (this.db) {
+      this.persist()
+      this.db.close()
+    }
   }
 }
 
 let dbInstance: SilbenklingDB | null = null
 
-export function getDB(): SilbenklingDB {
+export async function getDB(): Promise<SilbenklingDB> {
   if (!dbInstance) {
     dbInstance = new SilbenklingDB()
+    await dbInstance.init()
   }
   return dbInstance
 }

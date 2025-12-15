@@ -1,8 +1,8 @@
 import { getDB } from '@/db'
 import type { MonitorRequest, MonitorResponse, EventType } from '@/types'
 
-export function monitorEvents(request: MonitorRequest): MonitorResponse {
-  const db = getDB()
+export async function monitorEvents(request: MonitorRequest): Promise<MonitorResponse> {
+  const db = await getDB()
 
   const events = db.getEvents({
     topic: request.topic,

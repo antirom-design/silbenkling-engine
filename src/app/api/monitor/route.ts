@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const response = monitorEvents(body)
+    const response = await monitorEvents(body)
 
     return NextResponse.json({
       success: true,

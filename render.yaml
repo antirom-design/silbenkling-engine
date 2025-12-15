@@ -3,10 +3,7 @@ services:
     name: silbenkling-engine
     runtime: node
     plan: starter
-    buildCommand: |
-      apt-get update && apt-get install -y python3 build-essential
-      npm install
-      npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:

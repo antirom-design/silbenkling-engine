@@ -15,9 +15,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const entry = putQA(body.question, body.answer, body.topic, body.actor)
+    const entry = await putQA(body.question, body.answer, body.topic, body.actor)
 
-    const db = getDB()
+    const db = await getDB()
     const confirmedEvent: Event = {
       id: nanoid(),
       type: 'qa_confirmed',

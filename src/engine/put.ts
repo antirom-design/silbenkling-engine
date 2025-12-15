@@ -2,8 +2,8 @@ import { nanoid } from 'nanoid'
 import { getDB } from '@/db'
 import type { Entry, Event, PutRequest } from '@/types'
 
-export function putEntry(request: PutRequest): Entry {
-  const db = getDB()
+export async function putEntry(request: PutRequest): Promise<Entry> {
+  const db = await getDB()
 
   const entry: Entry = {
     id: nanoid(),
@@ -43,8 +43,8 @@ export function putEntry(request: PutRequest): Entry {
   return entry
 }
 
-export function putQA(question: string, answer: string, topic: string, actor: string): Entry {
-  return putEntry({
+export async function putQA(question: string, answer: string, topic: string, actor: string): Promise<Entry> {
+  return await putEntry({
     topic,
     type: 'qa',
     content: `Q: ${question}\n\nA: ${answer}`,

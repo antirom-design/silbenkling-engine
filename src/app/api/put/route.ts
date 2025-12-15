@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const entry = putEntry(body)
+    const entry = await putEntry(body)
 
     return NextResponse.json({
       success: true,
