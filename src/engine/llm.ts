@@ -76,7 +76,7 @@ FOLLOWUPS: [Folgefrage 1] | [Folgefrage 2]`
 
     const answer = answerMatch ? answerMatch[1].trim() : text
     const followups = followupsMatch
-      ? followupsMatch[1].split('|').map(f => f.trim()).filter(f => f.length > 0)
+      ? followupsMatch[1].split('|').map((f: string) => f.trim()).filter((f: string) => f.length > 0)
       : undefined
 
     return { answer, followups }
