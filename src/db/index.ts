@@ -106,7 +106,8 @@ class SilbenklingDB {
   }
 
   async searchEntries(topic: string, query: string, actor: string): Promise<Entry[]> {
-    const topicPattern = topic.endsWith('%') ? topic.replace('%', '') + '%' : topic + '%'
+    // Topic mit Wildcards: wenn leer oder '%', dann alle, sonst mit Wildcards drum herum
+    const topicPattern = !topic || topic === '%' ? '%' : `%${topic}%`
     const searchPattern = `%${query}%`
 
     const result = await sql`
@@ -125,7 +126,7 @@ class SilbenklingDB {
   }
 
   async getEntriesByTopic(topic: string, actor: string): Promise<Entry[]> {
-    const topicPattern = topic.endsWith('%') ? topic.replace('%', '') + '%' : topic + '%'
+    const topicPattern = !topic || topic === '%' ? '%' : `%${topic}%`
 
     const result = await sql`
       SELECT * FROM entries
@@ -151,7 +152,7 @@ class SilbenklingDB {
     let params: any[] = []
 
     if (filters.topic) {
-      const topicPattern = filters.topic.replace('%', '') + '%'
+      const topicPattern = `%${filters.topic}%`
       conditions.push(`topic LIKE '${topicPattern}'`)
     }
 
