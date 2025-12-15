@@ -4,7 +4,7 @@ import type { MonitorRequest, MonitorResponse, EventType } from '@/types'
 export async function monitorEvents(request: MonitorRequest): Promise<MonitorResponse> {
   const db = await getDB()
 
-  const events = db.getEvents({
+  const events = await db.getEvents({
     topic: request.topic,
     types: request.event_types,
     from: request.from,
