@@ -4,7 +4,7 @@ import { getLLMProvider } from './llm'
 import type { GetRequest, GetResponse, Event } from '@/types'
 
 export async function getAnswer(request: GetRequest): Promise<GetResponse> {
-  const db = getDB()
+  const db = await getDB()
 
   const questionEvent: Event = {
     id: nanoid(),
@@ -16,9 +16,9 @@ export async function getAnswer(request: GetRequest): Promise<GetResponse> {
       question: request.question
     }
   }
-  db.insertEvent(questionEvent)
+  await db.insertEvent(questionEvent)
 
-  const entries = db.searchEntries(request.topic, request.question, request.actor)
+  const entries = await db.searchEntries(request.topic, request.question, request.actor)
 
   if (entries.length === 0) {
     const unansweredEvent: Event = {
@@ -31,7 +31,7 @@ export async function getAnswer(request: GetRequest): Promise<GetResponse> {
         question: request.question
       }
     }
-    db.insertEvent(unansweredEvent)
+    await db.insertEvent(unansweredEvent)
 
     return {
       answer: "Ich habe keine passenden Einträge zu dieser Frage gefunden. Möchtest du Wissen hinzufügen?",
@@ -53,7 +53,7 @@ export async function getAnswer(request: GetRequest): Promise<GetResponse> {
       sources_count: entries.length
     }
   }
-  db.insertEvent(answeredEvent)
+  await db.insertEvent(answeredEvent)
 
   return {
     answer: llmResponse.answer,
