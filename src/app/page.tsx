@@ -37,7 +37,7 @@ interface Event {
 
 export default function Home() {
   const [tab, setTab] = useState<'get' | 'put' | 'monitor'>('get')
-  const [question, setQuestion] = useState('')
+  const [question, setQuestion] = useState('was weißt du dazu?')
   const [topicFilter, setTopicFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [currentAnswer, setCurrentAnswer] = useState<Answer | null>(null)
@@ -211,6 +211,10 @@ export default function Home() {
 `}
       </pre>
 
+      <div style={{ marginBottom: '20px', color: '#666', fontSize: '12px', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
+        Ein Wissenskörper, der durch Nutzung wächst. PUT speichert, GET fragt, MONITOR beobachtet.
+      </div>
+
       <div style={{ marginBottom: '20px', borderBottom: '1px solid #333' }}>
         <button onClick={() => setTab('get')} style={{
           padding: '10px 20px',
@@ -246,7 +250,7 @@ export default function Home() {
 
       {tab === 'get' && (
         <div>
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>topic (was wird durchsucht, wildcards work)</label>
             <input
               type="text"
@@ -262,9 +266,12 @@ export default function Home() {
                 color: '#0f0'
               }}
             />
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              leer = alles | "8a" = wildcard suche | "klasse/8a" = exakt
+            </div>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>frage (instruction an die ki, was sie mit den entries machen soll)</label>
             <input
               type="text"
@@ -281,6 +288,9 @@ export default function Home() {
                 color: '#0f0'
               }}
             />
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              die frage beeinflusst nicht die suche, sondern was die ki mit den gefundenen entries macht
+            </div>
           </div>
 
           <button
@@ -381,7 +391,7 @@ export default function Home() {
 
       {tab === 'put' && (
         <div>
-          <div style={{ marginBottom: '10px', position: 'relative' }}>
+          <div style={{ marginBottom: '15px', position: 'relative' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>topic</label>
             <input
               type="text"
@@ -435,9 +445,12 @@ export default function Home() {
                 ))}
               </div>
             )}
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              neues topic anlegen oder aus autocomplete wählen (beginne zu tippen)
+            </div>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>type (optional)</label>
             <select
               value={addType}
@@ -458,9 +471,12 @@ export default function Home() {
               <option value="link">link</option>
               <option value="event">event</option>
             </select>
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              kategorisiert den eintrag (doc = dokument, qa = frage/antwort, etc.)
+            </div>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>content</label>
             <textarea
               placeholder="Wissen..."
@@ -477,6 +493,9 @@ export default function Home() {
                 resize: 'vertical'
               }}
             />
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              dein wissen: text, links, fakten - alles was zum topic gehört
+            </div>
           </div>
 
           <button
@@ -498,7 +517,7 @@ export default function Home() {
 
       {tab === 'monitor' && (
         <div>
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>topic filter (wildcards)</label>
             <input
               type="text"
@@ -514,9 +533,12 @@ export default function Home() {
                 color: '#0f0'
               }}
             />
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              filtert events nach topic (wildcards funktionieren)
+            </div>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '15px' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>event type (optional)</label>
             <select
               value={monitorType}
@@ -538,6 +560,9 @@ export default function Home() {
               <option value="question_unanswered">question_unanswered</option>
               <option value="qa_confirmed">qa_confirmed</option>
             </select>
+            <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
+              filtert nach event-typ (leer = alle events)
+            </div>
           </div>
 
           <button
