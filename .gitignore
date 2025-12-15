@@ -1,0 +1,10 @@
+node_modules
+.next
+.vercel
+*.db
+*.db-shm
+*.db-wal
+.env.local
+.env
+dist
+.DS_Store
