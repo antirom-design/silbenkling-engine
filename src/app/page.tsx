@@ -247,7 +247,7 @@ export default function Home() {
       {tab === 'get' && (
         <div>
           <div style={{ marginBottom: '10px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>topic filter (optional, wildcards work)</label>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>topic (was wird durchsucht, wildcards work)</label>
             <input
               type="text"
               placeholder="z.B. '8a' oder 'team' oder leer für alles"
@@ -265,10 +265,10 @@ export default function Home() {
           </div>
 
           <div style={{ marginBottom: '10px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>frage</label>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>frage (instruction an die ki, was sie mit den entries machen soll)</label>
             <input
               type="text"
-              placeholder="Was willst du wissen?"
+              placeholder="z.B. 'Fasse zusammen' oder 'Was sind die wichtigsten Punkte?'"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAsk()}

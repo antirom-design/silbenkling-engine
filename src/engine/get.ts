@@ -18,7 +18,8 @@ export async function getAnswer(request: GetRequest): Promise<GetResponse> {
   }
   await db.insertEvent(questionEvent)
 
-  const entries = await db.searchEntries(request.topic, request.question, request.actor)
+  // Hole ALLE Entries zum Topic - Frage ist nur für die KI
+  const entries = await db.getEntriesByTopic(request.topic, request.actor)
 
   if (entries.length === 0) {
     const unansweredEvent: Event = {
