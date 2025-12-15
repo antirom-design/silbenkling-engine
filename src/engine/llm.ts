@@ -156,8 +156,40 @@ FOLLOWUPS: [Folgefrage 1] | [Folgefrage 2]`
   }
 }
 
+class MockProvider implements LLMProvider {
+  async generateAnswer(question: string, entries: Entry[]): Promise<LLMResponse> {
+    if (entries.length === 0) {
+      return {
+        answer: "Ich habe keine passenden Einträge zu dieser Frage gefunden. Bitte füge Wissen hinzu oder formuliere die Frage anders."
+      }
+    }
+
+    const relevantEntries = entries.slice(0, 3)
+
+    let answer = `Basierend auf den gespeicherten Einträgen:\n\n`
+
+    relevantEntries.forEach((entry, i) => {
+      answer += `[${i + 1}] ${entry.content.substring(0, 200)}${entry.content.length > 200 ? '...' : ''}\n\n`
+    })
+
+    answer += `\n(Mock-Modus: Für intelligente Antworten füge einen API-Key hinzu)`
+
+    return {
+      answer,
+      followups: entries.length > 1 ? [
+        `Was gibt es noch zu ${entries[0].topic}?`,
+        `Kannst du mehr Details geben?`
+      ] : undefined
+    }
+  }
+}
+
 export function getLLMProvider(): LLMProvider {
-  const provider = process.env.LLM_PROVIDER || 'anthropic'
+  const provider = process.env.LLM_PROVIDER || 'mock'
+
+  if (provider === 'mock') {
+    return new MockProvider()
+  }
 
   if (provider === 'anthropic') {
     const apiKey = process.env.ANTHROPIC_API_KEY
