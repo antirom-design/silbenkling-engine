@@ -44,10 +44,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
 
   const [addTopic, setAddTopic] = useState('')
-  const [addType, setAddType] = useState<string>('doc')
+  const [addType, setAddType] = useState<string>('')
   const [addContent, setAddContent] = useState('')
   const [allTopics, setAllTopics] = useState<string[]>([])
+  const [allTypes, setAllTypes] = useState<string[]>([])
   const [showTopicSuggestions, setShowTopicSuggestions] = useState(false)
+  const [showTypeSuggestions, setShowTypeSuggestions] = useState(false)
 
   const [monitorTopic, setMonitorTopic] = useState('')
   const [monitorType, setMonitorType] = useState('')
@@ -57,6 +59,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchTopics()
+    fetchTypes()
   }, [])
 
   const fetchTopics = async () => {
@@ -71,8 +74,27 @@ export default function Home() {
     }
   }
 
+  const fetchTypes = async () => {
+    try {
+      const response = await fetch('/api/types')
+      const data = await response.json()
+      if (data.success) {
+        setAllTypes(data.types || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch types:', err)
+    }
+  }
+
+  const defaultTypes = ['doc', 'qa', 'fact', 'task', 'link', 'event']
+  const combinedTypes = [...new Set([...defaultTypes, ...allTypes])]
+
   const filteredTopics = allTopics.filter(t =>
     t.toLowerCase().includes(addTopic.toLowerCase())
+  )
+
+  const filteredTypes = combinedTypes.filter(t =>
+    t.toLowerCase().includes(addType.toLowerCase())
   )
 
   const handleAsk = async () => {
@@ -148,7 +170,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: addTopic,
-          type: addType,
+          type: addType || 'doc', // Default zu 'doc' wenn leer
           content: addContent,
           actor
         })
@@ -160,7 +182,9 @@ export default function Home() {
         alert('✓ Hinzugefügt')
         setAddContent('')
         setAddTopic('')
+        setAddType('')
         fetchTopics()
+        fetchTypes()
       } else {
         alert('✗ Fehler: ' + (data.error || 'Unknown'))
       }
@@ -450,11 +474,18 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
+          <div style={{ marginBottom: '15px', position: 'relative' }}>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666' }}>type (optional)</label>
-            <select
+            <input
+              type="text"
+              placeholder="z.B. 'doc', 'qa', 'fact' oder eigenen type..."
               value={addType}
-              onChange={(e) => setAddType(e.target.value)}
+              onChange={(e) => {
+                setAddType(e.target.value)
+                setShowTypeSuggestions(e.target.value.length > 0)
+              }}
+              onFocus={() => setShowTypeSuggestions(addType.length > 0)}
+              onBlur={() => setTimeout(() => setShowTypeSuggestions(false), 200)}
               style={{
                 width: '100%',
                 padding: '10px',
@@ -463,16 +494,42 @@ export default function Home() {
                 background: '#000',
                 color: '#0f0'
               }}
-            >
-              <option value="doc">doc</option>
-              <option value="qa">qa</option>
-              <option value="fact">fact</option>
-              <option value="task">task</option>
-              <option value="link">link</option>
-              <option value="event">event</option>
-            </select>
+            />
+            {showTypeSuggestions && filteredTypes.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: '#000',
+                border: '1px solid #0f0',
+                maxHeight: '150px',
+                overflowY: 'auto',
+                zIndex: 10
+              }}>
+                {filteredTypes.map(t => (
+                  <div
+                    key={t}
+                    onClick={() => {
+                      setAddType(t)
+                      setShowTypeSuggestions(false)
+                    }}
+                    style={{
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #333',
+                      color: '#0f0'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = '#001100'}
+                    onMouseOut={(e) => e.currentTarget.style.background = '#000'}
+                  >
+                    {t}
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ fontSize: '11px', color: '#555', marginTop: '3px' }}>
-              kategorisiert den eintrag (doc = dokument, qa = frage/antwort, etc.)
+              leer lassen oder aus defaults wählen oder eigenen type eingeben (beginne zu tippen)
             </div>
           </div>
 
