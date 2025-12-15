@@ -1,187 +1,184 @@
-import initSqlJs, { Database } from 'sql.js'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { sql } from '@vercel/postgres'
 import type { Entry, Event } from '@/types'
 
-const DB_PATH = process.env.DB_PATH || './data/silbenkling.db'
-
 class SilbenklingDB {
-  private db: Database | null = null
-  private SQL: any = null
-
   async init() {
-    if (this.db) return
+    // Create tables if they don't exist
+    await sql`
+      CREATE TABLE IF NOT EXISTS entries (
+        id TEXT PRIMARY KEY,
+        topic TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('doc', 'qa', 'fact', 'task', 'link', 'event')),
+        content TEXT NOT NULL,
+        tags JSONB NOT NULL DEFAULT '[]',
+        context JSONB DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL,
+        created_by TEXT NOT NULL,
+        read_permissions JSONB NOT NULL DEFAULT '[]',
+        write_permissions JSONB NOT NULL DEFAULT '[]',
+        version INTEGER NOT NULL DEFAULT 1
+      )
+    `
 
-    this.SQL = await initSqlJs()
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_entries_topic ON entries(topic)
+    `
 
-    if (existsSync(DB_PATH)) {
-      const buffer = readFileSync(DB_PATH)
-      this.db = new this.SQL.Database(buffer)
-    } else {
-      this.db = new this.SQL.Database()
-    }
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_entries_type ON entries(type)
+    `
 
-    const schema = readFileSync(join(process.cwd(), 'src/db/schema.sql'), 'utf-8')
-    this.db.exec(schema)
-    this.persist()
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_entries_created_at ON entries(created_at)
+    `
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK(type IN (
+          'entry_added',
+          'entry_updated',
+          'question_asked',
+          'question_answered',
+          'question_unanswered',
+          'qa_confirmed',
+          'access_denied'
+        )),
+        timestamp TIMESTAMP NOT NULL,
+        actor TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        entry_id TEXT,
+        payload JSONB DEFAULT NULL
+      )
+    `
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)
+    `
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)
+    `
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_events_topic ON events(topic)
+    `
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_events_actor ON events(actor)
+    `
   }
 
-  private persist() {
-    if (!this.db) return
-    const data = this.db.export()
-    writeFileSync(DB_PATH, Buffer.from(data))
-  }
-
-  insertEntry(entry: Entry): void {
-    if (!this.db) throw new Error('Database not initialized')
-
-    this.db.run(
-      `INSERT INTO entries (
+  async insertEntry(entry: Entry): Promise<void> {
+    await sql`
+      INSERT INTO entries (
         id, topic, type, content, tags, context,
         created_at, created_by, read_permissions, write_permissions, version
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        entry.id,
-        entry.topic,
-        entry.type,
-        entry.content,
-        JSON.stringify(entry.metadata.tags),
-        entry.metadata.context ? JSON.stringify(entry.metadata.context) : null,
-        entry.metadata.created_at,
-        entry.metadata.created_by,
-        JSON.stringify(entry.permissions.read),
-        JSON.stringify(entry.permissions.write),
-        entry.version
-      ]
-    )
-    this.persist()
+      ) VALUES (
+        ${entry.id},
+        ${entry.topic},
+        ${entry.type},
+        ${entry.content},
+        ${JSON.stringify(entry.metadata.tags)}::jsonb,
+        ${entry.metadata.context ? JSON.stringify(entry.metadata.context) : null}::jsonb,
+        ${entry.metadata.created_at}::timestamp,
+        ${entry.metadata.created_by},
+        ${JSON.stringify(entry.permissions.read)}::jsonb,
+        ${JSON.stringify(entry.permissions.write)}::jsonb,
+        ${entry.version}
+      )
+    `
   }
 
-  insertEvent(event: Event): void {
-    if (!this.db) throw new Error('Database not initialized')
-
-    this.db.run(
-      `INSERT INTO events (id, type, timestamp, actor, topic, entry_id, payload)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.id,
-        event.type,
-        event.timestamp,
-        event.actor,
-        event.topic,
-        event.entry_id || null,
-        event.payload ? JSON.stringify(event.payload) : null
-      ]
-    )
-    this.persist()
+  async insertEvent(event: Event): Promise<void> {
+    await sql`
+      INSERT INTO events (id, type, timestamp, actor, topic, entry_id, payload)
+      VALUES (
+        ${event.id},
+        ${event.type},
+        ${event.timestamp}::timestamp,
+        ${event.actor},
+        ${event.topic},
+        ${event.entry_id || null},
+        ${event.payload ? JSON.stringify(event.payload) : null}::jsonb
+      )
+    `
   }
 
-  searchEntries(topic: string, query: string, actor: string): Entry[] {
-    if (!this.db) throw new Error('Database not initialized')
-
-    const topicPattern = topic.endsWith('%') ? topic : `${topic}%`
+  async searchEntries(topic: string, query: string, actor: string): Promise<Entry[]> {
+    const topicPattern = topic.endsWith('%') ? topic.replace('%', '') + '%' : topic + '%'
     const searchPattern = `%${query}%`
-    const actorPattern = `%"${actor}"%`
 
-    const stmt = this.db.prepare(`
+    const result = await sql`
       SELECT * FROM entries
-      WHERE topic LIKE ?
-        AND (content LIKE ? OR tags LIKE ?)
+      WHERE topic LIKE ${topicPattern}
+        AND (content LIKE ${searchPattern} OR tags::text LIKE ${searchPattern})
         AND (
-          read_permissions = '[]'
-          OR read_permissions LIKE ?
+          read_permissions = '[]'::jsonb
+          OR read_permissions::text LIKE ${'%' + actor + '%'}
         )
       ORDER BY created_at DESC
       LIMIT 10
-    `)
+    `
 
-    stmt.bind([topicPattern, searchPattern, searchPattern, actorPattern])
-
-    const rows: any[] = []
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject())
-    }
-    stmt.free()
-
-    return rows.map(row => this.rowToEntry(row))
+    return result.rows.map(row => this.rowToEntry(row))
   }
 
-  getEntriesByTopic(topic: string, actor: string): Entry[] {
-    if (!this.db) throw new Error('Database not initialized')
+  async getEntriesByTopic(topic: string, actor: string): Promise<Entry[]> {
+    const topicPattern = topic.endsWith('%') ? topic.replace('%', '') + '%' : topic + '%'
 
-    const topicPattern = topic.endsWith('%') ? topic : `${topic}%`
-    const actorPattern = `%"${actor}"%`
-
-    const stmt = this.db.prepare(`
+    const result = await sql`
       SELECT * FROM entries
-      WHERE topic LIKE ?
+      WHERE topic LIKE ${topicPattern}
         AND (
-          read_permissions = '[]'
-          OR read_permissions LIKE ?
+          read_permissions = '[]'::jsonb
+          OR read_permissions::text LIKE ${'%' + actor + '%'}
         )
       ORDER BY created_at DESC
-    `)
+    `
 
-    stmt.bind([topicPattern, actorPattern])
-
-    const rows: any[] = []
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject())
-    }
-    stmt.free()
-
-    return rows.map(row => this.rowToEntry(row))
+    return result.rows.map(row => this.rowToEntry(row))
   }
 
-  getEvents(filters: {
+  async getEvents(filters: {
     topic?: string
     types?: string[]
     from?: string
     to?: string
     actor?: string
-  }): Event[] {
-    if (!this.db) throw new Error('Database not initialized')
-
-    let query = 'SELECT * FROM events WHERE 1=1'
-    const params: any[] = []
+  }): Promise<Event[]> {
+    let conditions = []
+    let params: any[] = []
 
     if (filters.topic) {
-      query += ' AND topic LIKE ?'
-      params.push(`${filters.topic}%`)
+      const topicPattern = filters.topic.replace('%', '') + '%'
+      conditions.push(`topic LIKE '${topicPattern}'`)
     }
 
     if (filters.types && filters.types.length > 0) {
-      query += ` AND type IN (${filters.types.map(() => '?').join(',')})`
-      params.push(...filters.types)
+      const typesList = filters.types.map(t => `'${t}'`).join(',')
+      conditions.push(`type IN (${typesList})`)
     }
 
     if (filters.from) {
-      query += ' AND timestamp >= ?'
-      params.push(filters.from)
+      conditions.push(`timestamp >= '${filters.from}'::timestamp`)
     }
 
     if (filters.to) {
-      query += ' AND timestamp <= ?'
-      params.push(filters.to)
+      conditions.push(`timestamp <= '${filters.to}'::timestamp`)
     }
 
     if (filters.actor) {
-      query += ' AND actor = ?'
-      params.push(filters.actor)
+      conditions.push(`actor = '${filters.actor}'`)
     }
 
-    query += ' ORDER BY timestamp DESC LIMIT 100'
+    const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
 
-    const stmt = this.db.prepare(query)
-    stmt.bind(params)
+    const result = await sql.query(
+      `SELECT * FROM events ${whereClause} ORDER BY timestamp DESC LIMIT 100`
+    )
 
-    const rows: any[] = []
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject())
-    }
-    stmt.free()
-
-    return rows.map(row => this.rowToEvent(row))
+    return result.rows.map(row => this.rowToEvent(row))
   }
 
   private rowToEntry(row: any): Entry {
@@ -191,14 +188,14 @@ class SilbenklingDB {
       type: row.type,
       content: row.content,
       metadata: {
-        tags: JSON.parse(row.tags),
-        created_at: row.created_at,
+        tags: Array.isArray(row.tags) ? row.tags : JSON.parse(row.tags || '[]'),
+        created_at: new Date(row.created_at).toISOString(),
         created_by: row.created_by,
-        context: row.context ? JSON.parse(row.context) : undefined
+        context: row.context || undefined
       },
       permissions: {
-        read: JSON.parse(row.read_permissions),
-        write: JSON.parse(row.write_permissions)
+        read: Array.isArray(row.read_permissions) ? row.read_permissions : JSON.parse(row.read_permissions || '[]'),
+        write: Array.isArray(row.write_permissions) ? row.write_permissions : JSON.parse(row.write_permissions || '[]')
       },
       version: row.version
     }
@@ -208,18 +205,11 @@ class SilbenklingDB {
     return {
       id: row.id,
       type: row.type,
-      timestamp: row.timestamp,
+      timestamp: new Date(row.timestamp).toISOString(),
       actor: row.actor,
       topic: row.topic,
       entry_id: row.entry_id || undefined,
-      payload: row.payload ? JSON.parse(row.payload) : undefined
-    }
-  }
-
-  close() {
-    if (this.db) {
-      this.persist()
-      this.db.close()
+      payload: row.payload || undefined
     }
   }
 }
